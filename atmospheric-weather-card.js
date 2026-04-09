@@ -702,271 +702,248 @@ class AtmosphericWeatherCardEditor extends HTMLElement {
         this._render();
     }
 
-    // ── Declarative schema for all fields ──
-    _getSections() {
-        const c = this._config;
-        return [
-            { id: 'entities', title: 'Entities', fields: [
-                { type: 'entity', key: 'weather_entity', label: 'Weather Entity (required)', domains: ['weather'] },
-                { type: 'entity', key: 'sun_entity', label: 'Sun Entity (required)', domains: ['sun'] },
-                { type: 'entity', key: 'moon_phase_entity', label: 'Moon Phase Entity', domains: ['sensor'] },
-                { type: 'entity', key: 'theme_entity', label: 'Theme Entity' },
-            ]},
-            { id: 'layout', title: 'Card Style & Layout', fields: [
-                { type: 'select', key: 'card_style', label: 'Card Style', options: [
-                    ['', 'Default (immersive)'], ['standalone', 'Standalone'], ['immersive', 'Immersive']] },
-                { type: 'row', fields: [
-                    { type: 'text', key: 'card_height', label: 'Card Height', placeholder: 'e.g. 130, 200px, auto' },
-                    { type: 'text', key: 'stack_order', label: 'Stack Order (z-index)', placeholder: 'e.g. 0, 1, -1' },
-                ]},
-                { type: 'text', key: 'offset', label: 'Offset (CSS margin)', placeholder: 'e.g. -50px 0px 0px 0px' },
-                { type: 'switch', key: 'square', label: 'Square (1:1 aspect ratio)' },
-                { type: 'switch', key: 'full_width', label: 'Full Width' },
-            ]},
-            { id: 'theme', title: 'Theme & Filters', fields: [
-                { type: 'select', key: 'theme', label: 'Theme', options: [
-                    ['', 'Auto (follow HA theme)'], ['dark', 'Dark'], ['light', 'Light'], ['night', 'Night'], ['day', 'Day']] },
-                { type: 'select', key: 'filter', label: 'Canvas Filter', options: [
-                    ['', 'None'], ['darken', 'Darken'], ['vivid', 'Vivid'], ['muted', 'Muted'], ['warm', 'Warm']] },
-                { type: 'select', key: 'moon_style', label: 'Moon Style', options: [
-                    ['', 'Default (blue)'], ['blue', 'Blue'], ['yellow', 'Yellow'], ['purple', 'Purple'], ['grey', 'Grey']] },
-                { type: 'switch', key: 'css_mask_vertical', label: 'Vertical Edge Fade (immersive)', invert: true },
-                { type: 'switch', key: 'css_mask_horizontal', label: 'Horizontal Edge Fade (immersive)', invert: true },
-            ]},
-            { id: 'sunmoon', title: 'Sun & Moon', fields: [
-                { type: 'text', key: 'sun_moon_size', label: 'Size (px)', placeholder: 'e.g. 50' },
-                { type: 'row', fields: [
-                    { type: 'text', key: 'sun_moon_x_position', label: 'X Position', placeholder: 'e.g. -65, 100, center' },
-                    { type: 'text', key: 'sun_moon_y_position', label: 'Y Position', placeholder: 'e.g. 55, center' },
-                ]},
-            ]},
-            { id: 'text', title: 'Text & Icons', fields: [
-                { type: 'entity', key: 'top_text_sensor', label: 'Top Text Sensor' },
-                { type: 'entity', key: 'bottom_text_sensor', label: 'Bottom Text Sensor' },
-                { type: 'row', fields: [
-                    { type: 'text', key: 'top_font_size', label: 'Top Font Size', placeholder: 'e.g. 3em, 48px' },
-                    { type: 'text', key: 'bottom_font_size', label: 'Bottom Font Size', placeholder: 'e.g. 16px, 1.2em' },
-                ]},
-                { type: 'text', key: 'bottom_text_icon', label: 'Bottom Text Icon', placeholder: 'e.g. mdi:water-percent, weather' },
-                { type: 'text', key: 'bottom_text_icon_path', label: 'Bottom Text Icon Path', placeholder: 'e.g. /local/weather-icons/' },
-                { type: 'select', key: 'text_background_style', label: 'Text Background Style', options: [
-                    ['', 'Default (frosted)'], ['frosted', 'Frosted'], ['pill', 'Pill'], ['fade', 'Fade']] },
-                { type: 'switch', key: 'top_text_background', label: 'Top Text Background' },
-                { type: 'switch', key: 'bottom_text_background', label: 'Bottom Text Background' },
-                { type: 'switch', key: 'combine_text', label: 'Combine Text', legacyKey: 'combine_texts' },
-                { type: 'switch', key: 'disable_text', label: 'Disable All Text' },
-                { type: 'switch', key: 'disable_bottom_text', label: 'Disable Bottom Text' },
-                { type: 'switch', key: 'disable_bottom_icon', label: 'Disable Bottom Icon' },
-            ]},
-            { id: 'textpos', title: 'Text Position', fields: [
-                { type: 'select', key: 'text_position', label: 'Text Position', options: [
-                    ['', 'Auto'], ['left', 'Left'], ['right', 'Right'], ['center', 'Center'],
-                    ['top-left', 'Top Left'], ['top-right', 'Top Right'], ['top-center', 'Top Center'],
-                    ['bottom-left', 'Bottom Left'], ['bottom-right', 'Bottom Right'], ['bottom-center', 'Bottom Center'],
-                    ['split-top', 'Split Top'], ['split-bottom', 'Split Bottom']] },
-                { type: 'select', key: 'text_alignment', label: 'Text Alignment', options: [
-                    ['', 'Default (spread)'], ['spread', 'Spread'], ['top', 'Top'], ['center', 'Center'], ['bottom', 'Bottom']] },
-                { type: 'switch', key: 'swap_text', label: 'Swap Texts', legacyKey: 'swap_texts' },
-            ]},
-            { id: 'images', title: 'Custom Images', fields: [
-                { type: 'text', key: 'day', label: 'Day Image', placeholder: '/local/house-day.png' },
-                { type: 'text', key: 'night', label: 'Night Image', placeholder: '/local/house-night.png' },
-                { type: 'row', fields: [
-                    { type: 'text', key: 'image_scale', label: 'Image Scale (%)', placeholder: 'e.g. 90' },
-                    { type: 'select', key: 'image_alignment', label: 'Image Alignment', options: [
-                        ['', 'Default (top-right)'], ['center', 'Center'],
-                        ['top-right', 'Top Right'], ['top-left', 'Top Left'], ['top-center', 'Top Center'],
-                        ['bottom', 'Bottom'], ['bottom-center', 'Bottom Center'], ['bottom-left', 'Bottom Left'], ['bottom-right', 'Bottom Right']] },
-                ]},
-                { type: 'entity', key: 'status_entity', label: 'Status Entity' },
-                { type: 'text', key: 'status_image_day', label: 'Status Image (Day)', placeholder: '/local/house-day-door-open.png' },
-                { type: 'text', key: 'status_image_night', label: 'Status Image (Night)', placeholder: '/local/house-night-door-open.png' },
-            ]},
-            { id: 'customcards', title: 'Embedded Cards', fields: [
-                { type: 'select', key: 'custom_cards_position', label: 'Position', options: [
-                    ['', 'Default (bottom)'], ['bottom', 'Bottom'], ['top', 'Top'],
-                    ['top-left', 'Top Left'], ['top-right', 'Top Right'], ['top-center', 'Top Center'],
-                    ['bottom-left', 'Bottom Left'], ['bottom-right', 'Bottom Right'], ['bottom-center', 'Bottom Center']] },
-                { type: 'text', key: 'custom_cards_css_class', label: 'CSS Class', placeholder: 'Custom CSS class name' },
-                { type: 'yaml', key: 'custom_cards', label: 'Custom Cards (YAML list — each entry needs at minimum a "type:" key)' },
-            ]},
-            { id: 'actions', title: 'Actions', fields: [
-                { type: 'yaml', key: 'tap_action', label: 'Tap Action (YAML — e.g. action: more-info)' },
-            ]},
-        ];
+    _esc(str) {
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    // ── Main render ──
+    // ── Render ──
     _render() {
-        const root = this.shadowRoot;
-        root.innerHTML = '';
-
-        const style = document.createElement('style');
-        style.textContent = `
-            :host { display: block; }
-            .section { border: 1px solid var(--divider-color, #e0e0e0); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
-            .section-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; cursor: pointer;
-                background: var(--secondary-background-color, #f5f5f5); user-select: none; font-weight: 500; font-size: 14px; }
-            .section-header:hover { background: var(--primary-background-color, #eee); }
-            .arrow { transition: transform 0.2s; font-size: 12px; }
-            .arrow.open { transform: rotate(90deg); }
-            .section-content { padding: 12px 14px; display: flex; flex-direction: column; gap: 12px; }
-            .row { display: flex; gap: 12px; align-items: flex-end; }
-            .row > * { flex: 1; min-width: 0; }
-            ha-entity-picker, ha-textfield, ha-select { display: block; width: 100%; }
-            .switch-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; }
-            .switch-row label { font-size: 14px; flex: 1; }
-            ha-switch { flex: none; }
-            .yaml-hint { font-size: 12px; color: var(--secondary-text-color, #888); font-style: italic; padding: 4px 0; }
-            textarea { width: 100%; min-height: 120px; font-family: monospace; font-size: 12px; padding: 8px;
-                border: 1px solid var(--divider-color, #ccc); border-radius: 4px; box-sizing: border-box;
-                background: var(--card-background-color, #fff); color: var(--primary-text-color, #333); resize: vertical; }
-        `;
-        root.appendChild(style);
-
-        const wrapper = document.createElement('div');
-        for (const section of this._getSections()) {
-            wrapper.appendChild(this._buildSection(section));
-        }
-        root.appendChild(wrapper);
-    }
-
-    // ── Section builder ──
-    _buildSection(section) {
-        const open = this._expandedSections.has(section.id);
-        const div = document.createElement('div');
-        div.className = 'section';
-
-        const header = document.createElement('div');
-        header.className = 'section-header';
-        header.innerHTML = `<span>${section.title}</span><span class="arrow ${open ? 'open' : ''}">&#9654;</span>`;
-        header.addEventListener('click', () => this._toggleSection(section.id));
-        div.appendChild(header);
-
-        if (open) {
-            const content = document.createElement('div');
-            content.className = 'section-content';
-            for (const field of section.fields) {
-                this._buildField(content, field);
-            }
-            div.appendChild(content);
-        }
-        return div;
-    }
-
-    // ── Field builder — creates real DOM elements with imperative property setting ──
-    _buildField(container, field) {
         const c = this._config;
+        const S = (id) => this._expandedSections.has(id);
 
-        switch (field.type) {
-            case 'entity': {
-                const el = document.createElement('ha-entity-picker');
-                el.hass = this._hass;
-                el.value = c[field.key] || '';
-                el.label = field.label;
-                if (field.domains) el.includeDomains = field.domains;
-                el.allowCustomEntity = true;
-                el.addEventListener('value-changed', (ev) => {
-                    this._updateConfig(field.key, ev.detail.value || '');
-                });
-                container.appendChild(el);
-                break;
+        this.shadowRoot.innerHTML = `
+<style>
+:host { display: block; }
+.sec { border: 1px solid var(--divider-color, #e0e0e0); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
+.sh { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; cursor: pointer;
+    background: var(--secondary-background-color, #f5f5f5); user-select: none; font-weight: 500; font-size: 14px; }
+.sh:hover { background: var(--primary-background-color, #eee); }
+.ar { transition: transform 0.2s; font-size: 12px; }
+.ar.open { transform: rotate(90deg); }
+.sc { padding: 12px 14px; display: flex; flex-direction: column; gap: 12px; }
+.row { display: flex; gap: 12px; align-items: flex-end; }
+.row > * { flex: 1; min-width: 0; }
+ha-entity-picker, ha-textfield, ha-select { display: block; width: 100%; }
+.sr { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; }
+.sr label { font-size: 14px; flex: 1; }
+ha-switch { flex: none; }
+.yh { font-size: 12px; color: var(--secondary-text-color, #888); font-style: italic; padding: 4px 0; }
+textarea { width: 100%; min-height: 120px; font-family: monospace; font-size: 12px; padding: 8px;
+    border: 1px solid var(--divider-color, #ccc); border-radius: 4px; box-sizing: border-box;
+    background: var(--card-background-color, #fff); color: var(--primary-text-color, #333); resize: vertical; }
+</style>
+<div>
+${this._sec('entities', 'Entities', S('entities'), `
+    ${this._entity('weather_entity', 'Weather Entity (required)', 'weather')}
+    ${this._entity('sun_entity', 'Sun Entity (required)', 'sun')}
+    ${this._entity('moon_phase_entity', 'Moon Phase Entity', 'sensor')}
+    ${this._entity('theme_entity', 'Theme Entity', '')}
+`)}
+${this._sec('layout', 'Card Style & Layout', S('layout'), `
+    ${this._sel('card_style', 'Card Style', [['', 'Default (immersive)'], ['standalone', 'Standalone'], ['immersive', 'Immersive']])}
+    <div class="row">
+        ${this._txt('card_height', 'Card Height', 'e.g. 130, 200px, auto')}
+        ${this._txt('stack_order', 'Stack Order (z-index)', 'e.g. 0, 1, -1')}
+    </div>
+    ${this._txt('offset', 'Offset (CSS margin)', 'e.g. -50px 0px 0px 0px')}
+    ${this._sw('square', 'Square (1:1 aspect ratio)')}
+    ${this._sw('full_width', 'Full Width')}
+`)}
+${this._sec('theme', 'Theme & Filters', S('theme'), `
+    ${this._sel('theme', 'Theme', [['', 'Auto (follow HA theme)'], ['dark', 'Dark'], ['light', 'Light'], ['night', 'Night'], ['day', 'Day']])}
+    ${this._sel('filter', 'Canvas Filter', [['', 'None'], ['darken', 'Darken'], ['vivid', 'Vivid'], ['muted', 'Muted'], ['warm', 'Warm']])}
+    ${this._sel('moon_style', 'Moon Style', [['', 'Default (blue)'], ['blue', 'Blue'], ['yellow', 'Yellow'], ['purple', 'Purple'], ['grey', 'Grey']])}
+    ${this._sw('css_mask_vertical', 'Vertical Edge Fade (immersive)', true)}
+    ${this._sw('css_mask_horizontal', 'Horizontal Edge Fade (immersive)', true)}
+`)}
+${this._sec('sunmoon', 'Sun & Moon', S('sunmoon'), `
+    ${this._txt('sun_moon_size', 'Size (px)', 'e.g. 50')}
+    <div class="row">
+        ${this._txt('sun_moon_x_position', 'X Position', 'e.g. -65, 100, center')}
+        ${this._txt('sun_moon_y_position', 'Y Position', 'e.g. 55, center')}
+    </div>
+`)}
+${this._sec('text', 'Text & Icons', S('text'), `
+    ${this._entity('top_text_sensor', 'Top Text Sensor', '')}
+    ${this._entity('bottom_text_sensor', 'Bottom Text Sensor', '')}
+    <div class="row">
+        ${this._txt('top_font_size', 'Top Font Size', 'e.g. 3em, 48px')}
+        ${this._txt('bottom_font_size', 'Bottom Font Size', 'e.g. 16px, 1.2em')}
+    </div>
+    ${this._txt('bottom_text_icon', 'Bottom Text Icon', 'e.g. mdi:water-percent, weather')}
+    ${this._txt('bottom_text_icon_path', 'Bottom Text Icon Path', 'e.g. /local/weather-icons/')}
+    ${this._sel('text_background_style', 'Text Background Style', [['', 'Default (frosted)'], ['frosted', 'Frosted'], ['pill', 'Pill'], ['fade', 'Fade']])}
+    ${this._sw('top_text_background', 'Top Text Background')}
+    ${this._sw('bottom_text_background', 'Bottom Text Background')}
+    ${this._sw('combine_text', 'Combine Text')}
+    ${this._sw('disable_text', 'Disable All Text')}
+    ${this._sw('disable_bottom_text', 'Disable Bottom Text')}
+    ${this._sw('disable_bottom_icon', 'Disable Bottom Icon')}
+`)}
+${this._sec('textpos', 'Text Position', S('textpos'), `
+    ${this._sel('text_position', 'Text Position', [['', 'Auto'], ['left', 'Left'], ['right', 'Right'], ['center', 'Center'],
+        ['top-left', 'Top Left'], ['top-right', 'Top Right'], ['top-center', 'Top Center'],
+        ['bottom-left', 'Bottom Left'], ['bottom-right', 'Bottom Right'], ['bottom-center', 'Bottom Center'],
+        ['split-top', 'Split Top'], ['split-bottom', 'Split Bottom']])}
+    ${this._sel('text_alignment', 'Text Alignment', [['', 'Default (spread)'], ['spread', 'Spread'], ['top', 'Top'], ['center', 'Center'], ['bottom', 'Bottom']])}
+    ${this._sw('swap_text', 'Swap Texts')}
+`)}
+${this._sec('images', 'Custom Images', S('images'), `
+    ${this._txt('day', 'Day Image', '/local/house-day.png')}
+    ${this._txt('night', 'Night Image', '/local/house-night.png')}
+    <div class="row">
+        ${this._txt('image_scale', 'Image Scale (%)', 'e.g. 90')}
+        ${this._sel('image_alignment', 'Image Alignment', [['', 'Default (top-right)'], ['center', 'Center'],
+            ['top-right', 'Top Right'], ['top-left', 'Top Left'], ['top-center', 'Top Center'],
+            ['bottom', 'Bottom'], ['bottom-center', 'Bottom Center'], ['bottom-left', 'Bottom Left'], ['bottom-right', 'Bottom Right']])}
+    </div>
+    ${this._entity('status_entity', 'Status Entity', '')}
+    ${this._txt('status_image_day', 'Status Image (Day)', '/local/house-day-door-open.png')}
+    ${this._txt('status_image_night', 'Status Image (Night)', '/local/house-night-door-open.png')}
+`)}
+${this._sec('customcards', 'Embedded Cards', S('customcards'), `
+    ${this._sel('custom_cards_position', 'Position', [['', 'Default (bottom)'], ['bottom', 'Bottom'], ['top', 'Top'],
+        ['top-left', 'Top Left'], ['top-right', 'Top Right'], ['top-center', 'Top Center'],
+        ['bottom-left', 'Bottom Left'], ['bottom-right', 'Bottom Right'], ['bottom-center', 'Bottom Center']])}
+    ${this._txt('custom_cards_css_class', 'CSS Class', 'Custom CSS class name')}
+    <div class="yh">Custom Cards (YAML list — each entry needs at minimum a "type:" key)</div>
+    <textarea data-key="custom_cards">${this._esc(c.custom_cards ? this._toYaml(c.custom_cards) : '')}</textarea>
+`)}
+${this._sec('actions', 'Actions', S('actions'), `
+    <div class="yh">Tap Action (YAML — e.g. action: more-info)</div>
+    <textarea data-key="tap_action">${this._esc(c.tap_action ? this._toYaml(c.tap_action) : '')}</textarea>
+`)}
+</div>`;
+
+        // ── After innerHTML: set JS-only properties and bind events ──
+        this._afterRender();
+    }
+
+    _afterRender() {
+        const root = this.shadowRoot;
+
+        // Section headers
+        root.querySelectorAll('.sh').forEach(el => {
+            el.addEventListener('click', () => this._toggleSection(el.dataset.section));
+        });
+
+        // Entity pickers — need hass, value, includeDomains as JS properties
+        root.querySelectorAll('ha-entity-picker').forEach(el => {
+            const key = el.getAttribute('data-key');
+            if (this._hass) el.hass = this._hass;
+            el.value = this._config[key] || '';
+            const domains = el.getAttribute('data-domains');
+            if (domains) el.includeDomains = domains.split(',');
+            el.addEventListener('value-changed', (ev) => {
+                this._updateConfig(key, ev.detail.value || '');
+            });
+        });
+
+        // Textfields — value needs to be set as JS property after upgrade
+        root.querySelectorAll('ha-textfield').forEach(el => {
+            const key = el.getAttribute('data-key');
+            // Set value after element is upgraded
+            const setVal = () => { el.value = String(this._config[key] ?? ''); };
+            setVal();
+            if (customElements.get('ha-textfield')) {
+                setVal();
+            } else {
+                customElements.whenDefined('ha-textfield').then(setVal);
             }
-            case 'text': {
-                const el = document.createElement('ha-textfield');
-                el.label = field.label;
-                el.value = String(c[field.key] ?? '');
-                el.placeholder = field.placeholder || '';
-                el.addEventListener('change', (ev) => {
-                    let val = ev.target.value;
-                    if (['card_height', 'stack_order', 'image_scale', 'sun_moon_size'].includes(field.key)) {
-                        if (val !== '' && val !== 'auto' && val !== 'center' && !isNaN(Number(val))) val = Number(val);
-                    }
-                    if (['sun_moon_x_position', 'sun_moon_y_position'].includes(field.key)) {
-                        if (val !== '' && val !== 'center' && !isNaN(Number(val))) val = Number(val);
-                    }
-                    this._updateConfig(field.key, val);
-                });
-                container.appendChild(el);
-                break;
-            }
-            case 'select': {
-                const el = document.createElement('ha-select');
-                el.label = field.label;
-                el.value = String(c[field.key] || '');
-                el.fixedMenuPosition = true;
-                el.naturalMenuWidth = true;
-                for (const [val, lbl] of field.options) {
-                    const item = document.createElement('ha-list-item');
-                    item.value = val;
-                    item.textContent = lbl;
-                    el.appendChild(item);
+            el.addEventListener('change', (ev) => {
+                let val = ev.target.value;
+                if (['card_height', 'stack_order', 'image_scale', 'sun_moon_size'].includes(key)) {
+                    if (val !== '' && val !== 'auto' && val !== 'center' && !isNaN(Number(val))) val = Number(val);
                 }
-                el.addEventListener('selected', (ev) => {
-                    this._updateConfig(field.key, ev.target.value || '');
-                });
-                el.addEventListener('closed', (ev) => ev.stopPropagation());
-                container.appendChild(el);
-                break;
+                if (['sun_moon_x_position', 'sun_moon_y_position'].includes(key)) {
+                    if (val !== '' && val !== 'center' && !isNaN(Number(val))) val = Number(val);
+                }
+                this._updateConfig(key, val);
+            });
+        });
+
+        // Selects — value as JS property after upgrade
+        root.querySelectorAll('ha-select').forEach(el => {
+            const key = el.getAttribute('data-key');
+            const setVal = () => { el.value = String(this._config[key] || ''); };
+            setVal();
+            if (customElements.get('ha-select')) {
+                setVal();
+            } else {
+                customElements.whenDefined('ha-select').then(setVal);
             }
-            case 'switch': {
-                const row = document.createElement('div');
-                row.className = 'switch-row';
-                const label = document.createElement('label');
-                label.textContent = field.label;
-                const sw = document.createElement('ha-switch');
-                // invert: default is true (e.g. css_mask_*), checked = config !== false
-                if (field.invert) {
-                    sw.checked = c[field.key] !== false;
+            el.addEventListener('selected', (ev) => {
+                this._updateConfig(key, ev.target.value || '');
+            });
+            el.addEventListener('closed', (ev) => ev.stopPropagation());
+        });
+
+        // Switches
+        root.querySelectorAll('ha-switch').forEach(el => {
+            const key = el.getAttribute('data-key');
+            const invert = el.hasAttribute('data-invert');
+            el.addEventListener('change', (ev) => {
+                const checked = ev.target.checked;
+                if (invert && checked) {
+                    delete this._config[key];
                 } else {
-                    const val = field.legacyKey ? (c[field.key] ?? c[field.legacyKey]) : c[field.key];
-                    sw.checked = val === true;
+                    this._config[key] = checked;
                 }
-                sw.addEventListener('change', (ev) => {
-                    const checked = ev.target.checked;
-                    if (field.invert && checked) {
-                        delete this._config[field.key];
-                    } else {
-                        this._config[field.key] = checked;
-                    }
-                    this._fireChanged();
-                });
-                row.appendChild(label);
-                row.appendChild(sw);
-                container.appendChild(row);
-                break;
-            }
-            case 'yaml': {
-                const hint = document.createElement('div');
-                hint.className = 'yaml-hint';
-                hint.textContent = field.label;
-                container.appendChild(hint);
-                const ta = document.createElement('textarea');
-                ta.value = c[field.key] ? this._toYaml(c[field.key]) : '';
-                ta.addEventListener('change', () => {
-                    const parsed = this._parseYaml(ta.value);
-                    if (parsed === undefined) {
-                        delete this._config[field.key];
-                    } else {
-                        this._config[field.key] = (field.key === 'custom_cards' && !Array.isArray(parsed)) ? [parsed] : parsed;
-                    }
-                    this._fireChanged();
-                });
-                container.appendChild(ta);
-                break;
-            }
-            case 'row': {
-                const row = document.createElement('div');
-                row.className = 'row';
-                for (const sub of field.fields) {
-                    const wrap = document.createElement('div');
-                    this._buildField(wrap, sub);
-                    row.appendChild(wrap);
+                this._fireChanged();
+            });
+        });
+
+        // YAML textareas
+        root.querySelectorAll('textarea').forEach(el => {
+            const key = el.getAttribute('data-key');
+            el.addEventListener('change', () => {
+                const parsed = this._parseYaml(el.value);
+                if (parsed === undefined) {
+                    delete this._config[key];
+                } else {
+                    this._config[key] = (key === 'custom_cards' && !Array.isArray(parsed)) ? [parsed] : parsed;
                 }
-                container.appendChild(row);
-                break;
-            }
+                this._fireChanged();
+            });
+        });
+    }
+
+    // ── HTML fragment helpers (attributes only, no JS-property syntax) ──
+    _sec(id, title, open, content) {
+        return `<div class="sec">
+            <div class="sh" data-section="${id}"><span>${title}</span><span class="ar${open ? ' open' : ''}">&#9654;</span></div>
+            ${open ? `<div class="sc">${content}</div>` : ''}
+        </div>`;
+    }
+
+    _entity(key, label, domain) {
+        return `<ha-entity-picker data-key="${key}" data-domains="${this._esc(domain)}" label="${this._esc(label)}" allow-custom-entity></ha-entity-picker>`;
+    }
+
+    _txt(key, label, placeholder) {
+        return `<ha-textfield data-key="${key}" label="${this._esc(label)}" placeholder="${this._esc(placeholder || '')}"></ha-textfield>`;
+    }
+
+    _sel(key, label, options) {
+        const cur = String(this._config[key] || '');
+        const items = options.map(([v, l]) =>
+            `<ha-list-item value="${this._esc(v)}"${v === cur ? ' selected' : ''}>${this._esc(l)}</ha-list-item>`
+        ).join('');
+        return `<ha-select data-key="${key}" label="${this._esc(label)}" fixedMenuPosition naturalMenuWidth>${items}</ha-select>`;
+    }
+
+    _sw(key, label, invert) {
+        const c = this._config;
+        let checked;
+        if (invert) {
+            checked = c[key] !== false;
+        } else {
+            // support legacy plural keys
+            const legacyMap = { combine_text: 'combine_texts', swap_text: 'swap_texts' };
+            const val = legacyMap[key] ? (c[key] ?? c[legacyMap[key]]) : c[key];
+            checked = val === true;
         }
+        return `<div class="sr"><label>${this._esc(label)}</label><ha-switch data-key="${key}"${invert ? ' data-invert' : ''}${checked ? ' checked' : ''}></ha-switch></div>`;
     }
 
     // ── YAML helpers ──
