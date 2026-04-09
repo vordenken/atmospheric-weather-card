@@ -669,9 +669,16 @@ class AtmosphericWeatherCardEditor extends HTMLElement {
     set hass(hass) {
         this._hass = hass;
         if (this.shadowRoot) {
-            this.shadowRoot.querySelectorAll('ha-entity-picker').forEach(el => {
-                el.hass = hass;
-            });
+            const apply = () => {
+                this.shadowRoot.querySelectorAll('ha-entity-picker').forEach(el => {
+                    el.hass = hass;
+                });
+            };
+            if (customElements.get('ha-entity-picker')) {
+                apply();
+            } else {
+                customElements.whenDefined('ha-entity-picker').then(apply);
+            }
         }
     }
 
@@ -714,7 +721,7 @@ class AtmosphericWeatherCardEditor extends HTMLElement {
         this.shadowRoot.innerHTML = `
 <style>
 :host { display: block; }
-.sec { border: 1px solid var(--divider-color, #e0e0e0); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
+.sec { border: 1px solid var(--divider-color, #e0e0e0); border-radius: 8px; margin-bottom: 8px; }
 .sh { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; cursor: pointer;
     background: var(--secondary-background-color, #f5f5f5); user-select: none; font-weight: 500; font-size: 14px; }
 .sh:hover { background: var(--primary-background-color, #eee); }
@@ -827,13 +834,23 @@ ${this._sec('actions', 'Actions', S('actions'), `
             el.addEventListener('click', () => this._toggleSection(el.dataset.section));
         });
 
-        // Entity pickers — need hass, value, includeDomains as JS properties
+        // Entity pickers — all properties must be set AFTER custom element upgrade
         root.querySelectorAll('ha-entity-picker').forEach(el => {
             const key = el.getAttribute('data-key');
-            if (this._hass) el.hass = this._hass;
-            el.value = this._config[key] || '';
             const domains = el.getAttribute('data-domains');
-            if (domains) el.includeDomains = domains.split(',');
+            const label = el.getAttribute('data-label');
+            const setProps = () => {
+                if (this._hass) el.hass = this._hass;
+                el.value = this._config[key] || '';
+                el.label = label || '';
+                el.allowCustomEntity = true;
+                if (domains) el.includeDomains = domains.split(',');
+            };
+            if (customElements.get('ha-entity-picker')) {
+                setProps();
+            } else {
+                customElements.whenDefined('ha-entity-picker').then(setProps);
+            }
             el.addEventListener('value-changed', (ev) => {
                 this._updateConfig(key, ev.detail.value || '');
             });
@@ -862,21 +879,31 @@ ${this._sec('actions', 'Actions', S('actions'), `
             });
         });
 
-        // Selects — value as JS property after upgrade
-        root.querySelectorAll('ha-select').forEach(el => {
-            const key = el.getAttribute('data-key');
-            const setVal = () => { el.value = String(this._config[key] || ''); };
-            setVal();
-            if (customElements.get('ha-select')) {
-                setVal();
-            } else {
-                customElements.whenDefined('ha-select').then(setVal);
-            }
-            el.addEventListener('selected', (ev) => {
-                this._updateConfig(key, ev.target.value || '');
+        // Selects — all properties (value, fixedMenuPosition, naturalMenuWidth) must be JS properties
+        const initSelects = () => {
+            root.querySelectorAll('ha-select').forEach(el => {
+                const key = el.getAttribute('data-key');
+                el.fixedMenuPosition = true;
+                el.naturalMenuWidth = true;
+                // Set value after a frame so list items are initialized
+                requestAnimationFrame(() => {
+                    el.value = String(this._config[key] || '');
+                });
+                el.addEventListener('selected', () => {
+                    // Read el.value directly — it's already updated when selected fires
+                    const val = el.value;
+                    if (val !== undefined) {
+                        this._updateConfig(key, val || '');
+                    }
+                });
+                el.addEventListener('closed', (ev) => ev.stopPropagation());
             });
-            el.addEventListener('closed', (ev) => ev.stopPropagation());
-        });
+        };
+        if (customElements.get('ha-select')) {
+            initSelects();
+        } else {
+            customElements.whenDefined('ha-select').then(initSelects);
+        }
 
         // Switches
         root.querySelectorAll('ha-switch').forEach(el => {
@@ -917,7 +944,7 @@ ${this._sec('actions', 'Actions', S('actions'), `
     }
 
     _entity(key, label, domain) {
-        return `<ha-entity-picker data-key="${key}" data-domains="${this._esc(domain)}" label="${this._esc(label)}" allow-custom-entity></ha-entity-picker>`;
+        return `<ha-entity-picker data-key="${key}" data-domains="${this._esc(domain)}" data-label="${this._esc(label)}"></ha-entity-picker>`;
     }
 
     _txt(key, label, placeholder) {
@@ -925,11 +952,10 @@ ${this._sec('actions', 'Actions', S('actions'), `
     }
 
     _sel(key, label, options) {
-        const cur = String(this._config[key] || '');
         const items = options.map(([v, l]) =>
-            `<ha-list-item value="${this._esc(v)}"${v === cur ? ' selected' : ''}>${this._esc(l)}</ha-list-item>`
+            `<mwc-list-item value="${this._esc(v)}">${this._esc(l)}</mwc-list-item>`
         ).join('');
-        return `<ha-select data-key="${key}" label="${this._esc(label)}" fixedMenuPosition naturalMenuWidth>${items}</ha-select>`;
+        return `<ha-select data-key="${key}" label="${this._esc(label)}">${items}</ha-select>`;
     }
 
     _sw(key, label, invert) {
