@@ -653,6 +653,632 @@ class CloudShapeGenerator {
 }
 
 // ============================================================================
+// VISUAL EDITOR
+// ============================================================================
+const EDITOR_NAME = 'atmospheric-weather-card-editor';
+
+class AtmosphericWeatherCardEditor extends HTMLElement {
+    constructor() {
+        super();
+        this.attachShadow({ mode: 'open' });
+        this._config = {};
+        this._hass = null;
+        this._expandedSections = new Set(['entities']);
+    }
+
+    set hass(hass) {
+        this._hass = hass;
+        // Update entity pickers that need hass
+        if (this.shadowRoot) {
+            this.shadowRoot.querySelectorAll('ha-entity-picker').forEach(el => {
+                el.hass = hass;
+            });
+        }
+    }
+
+    setConfig(config) {
+        this._config = { ...config };
+        this._render();
+    }
+
+    _fireChanged() {
+        const ev = new CustomEvent('config-changed', {
+            detail: { config: { ...this._config } },
+            bubbles: true,
+            composed: true,
+        });
+        this.dispatchEvent(ev);
+    }
+
+    _updateConfig(key, value) {
+        if (value === '' || value === undefined || value === null) {
+            delete this._config[key];
+        } else {
+            this._config[key] = value;
+        }
+        this._fireChanged();
+    }
+
+    _toggleSection(name) {
+        if (this._expandedSections.has(name)) {
+            this._expandedSections.delete(name);
+        } else {
+            this._expandedSections.add(name);
+        }
+        this._render();
+    }
+
+    _render() {
+        const c = this._config;
+
+        this.shadowRoot.innerHTML = `
+            <style>
+                :host {
+                    display: block;
+                    font-family: var(--paper-font-body1_-_font-family, 'Roboto', sans-serif);
+                }
+                .editor-section {
+                    border: 1px solid var(--divider-color, #e0e0e0);
+                    border-radius: 8px;
+                    margin-bottom: 8px;
+                    overflow: hidden;
+                }
+                .section-header {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    padding: 10px 14px;
+                    cursor: pointer;
+                    background: var(--secondary-background-color, #f5f5f5);
+                    user-select: none;
+                    font-weight: 500;
+                    font-size: 14px;
+                }
+                .section-header:hover {
+                    background: var(--primary-background-color, #eee);
+                }
+                .section-header .arrow {
+                    transition: transform 0.2s;
+                    font-size: 12px;
+                }
+                .section-header .arrow.open {
+                    transform: rotate(90deg);
+                }
+                .section-content {
+                    padding: 12px 14px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 12px;
+                }
+                .row {
+                    display: flex;
+                    gap: 12px;
+                    align-items: flex-end;
+                }
+                .row > * {
+                    flex: 1;
+                    min-width: 0;
+                }
+                ha-entity-picker {
+                    display: block;
+                    width: 100%;
+                }
+                ha-textfield {
+                    display: block;
+                    width: 100%;
+                }
+                ha-select {
+                    display: block;
+                    width: 100%;
+                }
+                .switch-row {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    padding: 4px 0;
+                }
+                .switch-row label {
+                    font-size: 14px;
+                    flex: 1;
+                }
+                ha-switch {
+                    flex: none;
+                }
+                .yaml-hint {
+                    font-size: 12px;
+                    color: var(--secondary-text-color, #888);
+                    font-style: italic;
+                    padding: 4px 0;
+                }
+                textarea {
+                    width: 100%;
+                    min-height: 120px;
+                    font-family: monospace;
+                    font-size: 12px;
+                    padding: 8px;
+                    border: 1px solid var(--divider-color, #ccc);
+                    border-radius: 4px;
+                    background: var(--card-background-color, #fff);
+                    color: var(--primary-text-color, #333);
+                    resize: vertical;
+                    box-sizing: border-box;
+                }
+            </style>
+            <div class="editor">
+                ${this._renderSection('entities', 'Entities', this._renderEntities(c))}
+                ${this._renderSection('layout', 'Card Style & Layout', this._renderLayout(c))}
+                ${this._renderSection('theme', 'Theme & Filters', this._renderTheme(c))}
+                ${this._renderSection('sunmoon', 'Sun & Moon', this._renderSunMoon(c))}
+                ${this._renderSection('text', 'Text & Icons', this._renderText(c))}
+                ${this._renderSection('textpos', 'Text Position', this._renderTextPosition(c))}
+                ${this._renderSection('images', 'Custom Images', this._renderImages(c))}
+                ${this._renderSection('customcards', 'Embedded Cards', this._renderCustomCards(c))}
+                ${this._renderSection('actions', 'Actions', this._renderActions(c))}
+            </div>
+        `;
+
+        this._bindEvents();
+    }
+
+    _renderSection(id, title, content) {
+        const open = this._expandedSections.has(id);
+        return `
+            <div class="editor-section">
+                <div class="section-header" data-section="${id}">
+                    <span>${title}</span>
+                    <span class="arrow ${open ? 'open' : ''}">&#9654;</span>
+                </div>
+                ${open ? `<div class="section-content">${content}</div>` : ''}
+            </div>
+        `;
+    }
+
+    // === ENTITY FIELDS ===
+    _renderEntities(c) {
+        return `
+            <ha-entity-picker
+                data-key="weather_entity"
+                .hass=${null}
+                .value="${c.weather_entity || ''}"
+                .label=${"Weather Entity (required)"}
+                .includeDomains=${JSON.stringify(["weather"])}
+                allow-custom-entity
+            ></ha-entity-picker>
+            <ha-entity-picker
+                data-key="sun_entity"
+                .hass=${null}
+                .value="${c.sun_entity || ''}"
+                .label=${"Sun Entity (required)"}
+                .includeDomains=${JSON.stringify(["sun"])}
+                allow-custom-entity
+            ></ha-entity-picker>
+            <ha-entity-picker
+                data-key="moon_phase_entity"
+                .hass=${null}
+                .value="${c.moon_phase_entity || ''}"
+                .label=${"Moon Phase Entity"}
+                .includeDomains=${JSON.stringify(["sensor"])}
+                allow-custom-entity
+            ></ha-entity-picker>
+            <ha-entity-picker
+                data-key="theme_entity"
+                .hass=${null}
+                .value="${c.theme_entity || ''}"
+                .label=${"Theme Entity"}
+                allow-custom-entity
+            ></ha-entity-picker>
+        `;
+    }
+
+    // === LAYOUT ===
+    _renderLayout(c) {
+        return `
+            ${this._select('card_style', 'Card Style', c.card_style || '', [
+                { value: '', label: 'Default (immersive)' },
+                { value: 'standalone', label: 'Standalone' },
+                { value: 'immersive', label: 'Immersive' },
+            ])}
+            <div class="row">
+                ${this._textfield('card_height', 'Card Height', c.card_height ?? '', 'e.g. 130, 200px, auto')}
+                ${this._textfield('stack_order', 'Stack Order (z-index)', c.stack_order ?? '', 'e.g. 0, 1, -1')}
+            </div>
+            ${this._textfield('offset', 'Offset (CSS margin)', c.offset || '', 'e.g. -50px 0px 0px 0px')}
+            ${this._switch('square', 'Square (1:1 aspect ratio)', c.square === true)}
+            ${this._switch('full_width', 'Full Width', c.full_width === true)}
+        `;
+    }
+
+    // === THEME & FILTERS ===
+    _renderTheme(c) {
+        return `
+            ${this._select('theme', 'Theme', c.theme || '', [
+                { value: '', label: 'Auto (follow HA theme)' },
+                { value: 'dark', label: 'Dark' },
+                { value: 'light', label: 'Light' },
+                { value: 'night', label: 'Night' },
+                { value: 'day', label: 'Day' },
+            ])}
+            ${this._select('filter', 'Canvas Filter', c.filter || '', [
+                { value: '', label: 'None' },
+                { value: 'darken', label: 'Darken' },
+                { value: 'vivid', label: 'Vivid' },
+                { value: 'muted', label: 'Muted' },
+                { value: 'warm', label: 'Warm' },
+            ])}
+            ${this._select('moon_style', 'Moon Style', c.moon_style || '', [
+                { value: '', label: 'Default (blue)' },
+                { value: 'blue', label: 'Blue' },
+                { value: 'yellow', label: 'Yellow' },
+                { value: 'purple', label: 'Purple' },
+                { value: 'grey', label: 'Grey' },
+            ])}
+            ${this._switch('css_mask_vertical', 'Vertical Edge Fade (immersive)', c.css_mask_vertical !== false)}
+            ${this._switch('css_mask_horizontal', 'Horizontal Edge Fade (immersive)', c.css_mask_horizontal !== false)}
+        `;
+    }
+
+    // === SUN & MOON ===
+    _renderSunMoon(c) {
+        return `
+            ${this._textfield('sun_moon_size', 'Size (px)', c.sun_moon_size ?? '', 'e.g. 50')}
+            <div class="row">
+                ${this._textfield('sun_moon_x_position', 'X Position', c.sun_moon_x_position ?? '', 'e.g. -65, 100, center')}
+                ${this._textfield('sun_moon_y_position', 'Y Position', c.sun_moon_y_position ?? '', 'e.g. 55, center')}
+            </div>
+        `;
+    }
+
+    // === TEXT ===
+    _renderText(c) {
+        return `
+            <ha-entity-picker
+                data-key="top_text_sensor"
+                .hass=${null}
+                .value="${c.top_text_sensor || ''}"
+                .label=${"Top Text Sensor"}
+                allow-custom-entity
+            ></ha-entity-picker>
+            <ha-entity-picker
+                data-key="bottom_text_sensor"
+                .hass=${null}
+                .value="${c.bottom_text_sensor || ''}"
+                .label=${"Bottom Text Sensor"}
+                allow-custom-entity
+            ></ha-entity-picker>
+            <div class="row">
+                ${this._textfield('top_font_size', 'Top Font Size', c.top_font_size || '', 'e.g. 3em, 48px')}
+                ${this._textfield('bottom_font_size', 'Bottom Font Size', c.bottom_font_size || '', 'e.g. 16px, 1.2em')}
+            </div>
+            ${this._textfield('bottom_text_icon', 'Bottom Text Icon', c.bottom_text_icon || '', 'e.g. mdi:water-percent, weather')}
+            ${this._textfield('bottom_text_icon_path', 'Bottom Text Icon Path', c.bottom_text_icon_path || '', 'e.g. /local/weather-icons/')}
+            ${this._select('text_background_style', 'Text Background Style', c.text_background_style || '', [
+                { value: '', label: 'Default (frosted)' },
+                { value: 'frosted', label: 'Frosted' },
+                { value: 'pill', label: 'Pill' },
+                { value: 'fade', label: 'Fade' },
+            ])}
+            ${this._switch('top_text_background', 'Top Text Background', c.top_text_background === true)}
+            ${this._switch('bottom_text_background', 'Bottom Text Background', c.bottom_text_background === true)}
+            ${this._switch('combine_text', 'Combine Text', (c.combine_text ?? c.combine_texts) === true)}
+            ${this._switch('disable_text', 'Disable All Text', c.disable_text === true)}
+            ${this._switch('disable_bottom_text', 'Disable Bottom Text', c.disable_bottom_text === true)}
+            ${this._switch('disable_bottom_icon', 'Disable Bottom Icon', c.disable_bottom_icon === true)}
+        `;
+    }
+
+    // === TEXT POSITION ===
+    _renderTextPosition(c) {
+        return `
+            ${this._select('text_position', 'Text Position', c.text_position || '', [
+                { value: '', label: 'Auto' },
+                { value: 'left', label: 'Left' },
+                { value: 'right', label: 'Right' },
+                { value: 'center', label: 'Center' },
+                { value: 'top-left', label: 'Top Left' },
+                { value: 'top-right', label: 'Top Right' },
+                { value: 'top-center', label: 'Top Center' },
+                { value: 'bottom-left', label: 'Bottom Left' },
+                { value: 'bottom-right', label: 'Bottom Right' },
+                { value: 'bottom-center', label: 'Bottom Center' },
+                { value: 'split-top', label: 'Split Top' },
+                { value: 'split-bottom', label: 'Split Bottom' },
+            ])}
+            ${this._select('text_alignment', 'Text Alignment', c.text_alignment || '', [
+                { value: '', label: 'Default (spread)' },
+                { value: 'spread', label: 'Spread' },
+                { value: 'top', label: 'Top' },
+                { value: 'center', label: 'Center' },
+                { value: 'bottom', label: 'Bottom' },
+            ])}
+            ${this._switch('swap_text', 'Swap Texts', (c.swap_text ?? c.swap_texts) === true)}
+        `;
+    }
+
+    // === IMAGES ===
+    _renderImages(c) {
+        return `
+            ${this._textfield('day', 'Day Image', c.day || '', '/local/house-day.png')}
+            ${this._textfield('night', 'Night Image', c.night || '', '/local/house-night.png')}
+            <div class="row">
+                ${this._textfield('image_scale', 'Image Scale (%)', c.image_scale ?? '', 'e.g. 90')}
+                ${this._select('image_alignment', 'Image Alignment', c.image_alignment || '', [
+                    { value: '', label: 'Default (top-right)' },
+                    { value: 'center', label: 'Center' },
+                    { value: 'top-right', label: 'Top Right' },
+                    { value: 'top-left', label: 'Top Left' },
+                    { value: 'top-center', label: 'Top Center' },
+                    { value: 'bottom', label: 'Bottom' },
+                    { value: 'bottom-center', label: 'Bottom Center' },
+                    { value: 'bottom-left', label: 'Bottom Left' },
+                    { value: 'bottom-right', label: 'Bottom Right' },
+                ])}
+            </div>
+            <ha-entity-picker
+                data-key="status_entity"
+                .hass=${null}
+                .value="${c.status_entity || ''}"
+                .label=${"Status Entity"}
+                allow-custom-entity
+            ></ha-entity-picker>
+            ${this._textfield('status_image_day', 'Status Image (Day)', c.status_image_day || '', '/local/house-day-door-open.png')}
+            ${this._textfield('status_image_night', 'Status Image (Night)', c.status_image_night || '', '/local/house-night-door-open.png')}
+        `;
+    }
+
+    // === CUSTOM CARDS ===
+    _renderCustomCards(c) {
+        const yaml = c.custom_cards ? this._toYaml(c.custom_cards) : '';
+        return `
+            ${this._select('custom_cards_position', 'Position', c.custom_cards_position || '', [
+                { value: '', label: 'Default (bottom)' },
+                { value: 'bottom', label: 'Bottom' },
+                { value: 'top', label: 'Top' },
+                { value: 'top-left', label: 'Top Left' },
+                { value: 'top-right', label: 'Top Right' },
+                { value: 'top-center', label: 'Top Center' },
+                { value: 'bottom-left', label: 'Bottom Left' },
+                { value: 'bottom-right', label: 'Bottom Right' },
+                { value: 'bottom-center', label: 'Bottom Center' },
+            ])}
+            ${this._textfield('custom_cards_css_class', 'CSS Class', c.custom_cards_css_class || '', 'Custom CSS class name')}
+            <div class="yaml-hint">Custom Cards (YAML list). Each entry needs at minimum a "type:" key.</div>
+            <textarea data-key="custom_cards_yaml" .value="${this._escapeHtml(yaml)}">${this._escapeHtml(yaml)}</textarea>
+        `;
+    }
+
+    // === ACTIONS ===
+    _renderActions(c) {
+        const yaml = c.tap_action ? this._toYaml(c.tap_action) : '';
+        return `
+            <div class="yaml-hint">Tap Action (YAML). Example: action: more-info</div>
+            <textarea data-key="tap_action_yaml" .value="${this._escapeHtml(yaml)}">${this._escapeHtml(yaml)}</textarea>
+        `;
+    }
+
+    // === HELPERS ===
+    _textfield(key, label, value, placeholder) {
+        return `<ha-textfield
+            data-key="${key}"
+            .label="${label}"
+            .value="${this._escapeHtml(String(value))}"
+            .placeholder="${placeholder || ''}"
+            .configValue="${key}"
+        ></ha-textfield>`;
+    }
+
+    _select(key, label, value, options) {
+        const items = options.map(o =>
+            `<ha-list-item value="${o.value}" ${o.value === value ? 'selected' : ''}>${o.label}</ha-list-item>`
+        ).join('');
+        return `<ha-select
+            data-key="${key}"
+            .label="${label}"
+            .value="${value}"
+            .configValue="${key}"
+            fixedMenuPosition
+            naturalMenuWidth
+        >${items}</ha-select>`;
+    }
+
+    _switch(key, label, checked) {
+        return `<div class="switch-row">
+            <label>${label}</label>
+            <ha-switch data-key="${key}" ${checked ? 'checked' : ''}></ha-switch>
+        </div>`;
+    }
+
+    _escapeHtml(str) {
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // Simple YAML serializer (flat objects and simple arrays of objects)
+    _toYaml(obj, indent = 0) {
+        const pad = '  '.repeat(indent);
+        if (Array.isArray(obj)) {
+            return obj.map(item => {
+                if (typeof item === 'object' && item !== null) {
+                    const entries = Object.entries(item);
+                    if (entries.length === 0) return `${pad}-`;
+                    return entries.map(([ k, v ], i) => {
+                        const prefix = i === 0 ? `${pad}- ` : `${pad}  `;
+                        if (typeof v === 'object' && v !== null) {
+                            return `${prefix}${k}:\n${this._toYaml(v, indent + 2)}`;
+                        }
+                        return `${prefix}${k}: ${v}`;
+                    }).join('\n');
+                }
+                return `${pad}- ${item}`;
+            }).join('\n');
+        }
+        if (typeof obj === 'object' && obj !== null) {
+            return Object.entries(obj).map(([k, v]) => {
+                if (typeof v === 'object' && v !== null) {
+                    return `${pad}${k}:\n${this._toYaml(v, indent + 1)}`;
+                }
+                return `${pad}${k}: ${v}`;
+            }).join('\n');
+        }
+        return `${pad}${obj}`;
+    }
+
+    // Simple YAML parser (handles flat key-value and arrays of objects)
+    _parseYaml(text) {
+        if (!text || !text.trim()) return undefined;
+        try {
+            // Use js-yaml if available (HA ships it), otherwise basic parse
+            if (window.jsyaml) return window.jsyaml.load(text);
+        } catch (_) { /* fall through */ }
+        // Basic parser fallback
+        return this._basicYamlParse(text);
+    }
+
+    _basicYamlParse(text) {
+        const lines = text.split('\n');
+        const isArray = lines.some(l => l.trimStart().startsWith('- '));
+        if (isArray) {
+            const items = [];
+            let current = null;
+            for (const line of lines) {
+                const trimmed = line.trimStart();
+                if (!trimmed || trimmed.startsWith('#')) continue;
+                if (trimmed.startsWith('- ')) {
+                    if (current !== null) items.push(current);
+                    const rest = trimmed.slice(2).trim();
+                    if (rest.includes(':')) {
+                        current = {};
+                        const [k, ...v] = rest.split(':');
+                        const val = v.join(':').trim();
+                        current[k.trim()] = this._yamlVal(val);
+                    } else {
+                        current = this._yamlVal(rest);
+                    }
+                } else if (current && typeof current === 'object' && trimmed.includes(':')) {
+                    const [k, ...v] = trimmed.split(':');
+                    current[k.trim()] = this._yamlVal(v.join(':').trim());
+                }
+            }
+            if (current !== null) items.push(current);
+            return items;
+        }
+        // Object
+        const result = {};
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('#')) continue;
+            if (trimmed.includes(':')) {
+                const [k, ...v] = trimmed.split(':');
+                result[k.trim()] = this._yamlVal(v.join(':').trim());
+            }
+        }
+        return Object.keys(result).length ? result : undefined;
+    }
+
+    _yamlVal(str) {
+        if (str === 'true') return true;
+        if (str === 'false') return false;
+        if (str === 'null' || str === '') return str === '' ? '' : null;
+        if (!isNaN(Number(str)) && str !== '') return Number(str);
+        // Strip quotes
+        if ((str.startsWith("'") && str.endsWith("'")) || (str.startsWith('"') && str.endsWith('"'))) {
+            return str.slice(1, -1);
+        }
+        return str;
+    }
+
+    _bindEvents() {
+        const root = this.shadowRoot;
+
+        // Section toggles
+        root.querySelectorAll('.section-header').forEach(el => {
+            el.addEventListener('click', () => this._toggleSection(el.dataset.section));
+        });
+
+        // Entity pickers
+        root.querySelectorAll('ha-entity-picker').forEach(el => {
+            if (this._hass) el.hass = this._hass;
+            const key = el.dataset.key;
+            el.addEventListener('value-changed', (ev) => {
+                this._updateConfig(key, ev.detail.value || '');
+            });
+        });
+
+        // Text fields
+        root.querySelectorAll('ha-textfield').forEach(el => {
+            const key = el.dataset.key;
+            el.addEventListener('change', (ev) => {
+                let val = ev.target.value;
+                // Auto-convert to number where appropriate
+                if (['card_height', 'stack_order', 'image_scale', 'sun_moon_size'].includes(key)) {
+                    if (val !== '' && val !== 'auto' && val !== 'center' && !isNaN(Number(val))) {
+                        val = Number(val);
+                    }
+                }
+                if (['sun_moon_x_position', 'sun_moon_y_position'].includes(key)) {
+                    if (val !== '' && val !== 'center' && !isNaN(Number(val))) {
+                        val = Number(val);
+                    }
+                }
+                this._updateConfig(key, val);
+            });
+        });
+
+        // Selects
+        root.querySelectorAll('ha-select').forEach(el => {
+            const key = el.dataset.key;
+            el.addEventListener('selected', (ev) => {
+                this._updateConfig(key, ev.target.value || '');
+            });
+            el.addEventListener('closed', (ev) => {
+                ev.stopPropagation();
+            });
+        });
+
+        // Switches
+        root.querySelectorAll('ha-switch').forEach(el => {
+            const key = el.dataset.key;
+            el.addEventListener('change', (ev) => {
+                const checked = ev.target.checked;
+                // For css_mask_* the default is true, so we store false explicitly
+                if ((key === 'css_mask_vertical' || key === 'css_mask_horizontal') && checked) {
+                    delete this._config[key];
+                } else {
+                    this._config[key] = checked;
+                }
+                this._fireChanged();
+            });
+        });
+
+        // YAML textareas
+        root.querySelectorAll('textarea').forEach(el => {
+            const key = el.dataset.key;
+            el.addEventListener('change', () => {
+                const text = el.value;
+                if (key === 'custom_cards_yaml') {
+                    const parsed = this._parseYaml(text);
+                    if (parsed === undefined) {
+                        delete this._config.custom_cards;
+                    } else {
+                        this._config.custom_cards = Array.isArray(parsed) ? parsed : [parsed];
+                    }
+                } else if (key === 'tap_action_yaml') {
+                    const parsed = this._parseYaml(text);
+                    if (parsed === undefined) {
+                        delete this._config.tap_action;
+                    } else {
+                        this._config.tap_action = parsed;
+                    }
+                }
+                this._fireChanged();
+            });
+        });
+    }
+}
+
+if (!customElements.get(EDITOR_NAME)) {
+    customElements.define(EDITOR_NAME, AtmosphericWeatherCardEditor);
+}
+
+// ============================================================================
 // MAIN CARD CLASS
 // ============================================================================
 class AtmosphericWeatherCard extends HTMLElement {
@@ -2264,6 +2890,10 @@ class AtmosphericWeatherCard extends HTMLElement {
 
     getCardSize() {
         return 4;
+    }
+
+    static getConfigElement() {
+        return document.createElement(EDITOR_NAME);
     }
 
     static getStubConfig() {
