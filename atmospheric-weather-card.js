@@ -668,7 +668,6 @@ class AtmosphericWeatherCardEditor extends HTMLElement {
 
     set hass(hass) {
         this._hass = hass;
-        // Update entity pickers that need hass
         if (this.shadowRoot) {
             this.shadowRoot.querySelectorAll('ha-entity-picker').forEach(el => {
                 el.hass = hass;
@@ -682,12 +681,10 @@ class AtmosphericWeatherCardEditor extends HTMLElement {
     }
 
     _fireChanged() {
-        const ev = new CustomEvent('config-changed', {
+        this.dispatchEvent(new CustomEvent('config-changed', {
             detail: { config: { ...this._config } },
-            bubbles: true,
-            composed: true,
-        });
-        this.dispatchEvent(ev);
+            bubbles: true, composed: true,
+        }));
     }
 
     _updateConfig(key, value) {
@@ -700,435 +697,309 @@ class AtmosphericWeatherCardEditor extends HTMLElement {
     }
 
     _toggleSection(name) {
-        if (this._expandedSections.has(name)) {
-            this._expandedSections.delete(name);
-        } else {
-            this._expandedSections.add(name);
-        }
+        if (this._expandedSections.has(name)) this._expandedSections.delete(name);
+        else this._expandedSections.add(name);
         this._render();
     }
 
+    // ── Declarative schema for all fields ──
+    _getSections() {
+        const c = this._config;
+        return [
+            { id: 'entities', title: 'Entities', fields: [
+                { type: 'entity', key: 'weather_entity', label: 'Weather Entity (required)', domains: ['weather'] },
+                { type: 'entity', key: 'sun_entity', label: 'Sun Entity (required)', domains: ['sun'] },
+                { type: 'entity', key: 'moon_phase_entity', label: 'Moon Phase Entity', domains: ['sensor'] },
+                { type: 'entity', key: 'theme_entity', label: 'Theme Entity' },
+            ]},
+            { id: 'layout', title: 'Card Style & Layout', fields: [
+                { type: 'select', key: 'card_style', label: 'Card Style', options: [
+                    ['', 'Default (immersive)'], ['standalone', 'Standalone'], ['immersive', 'Immersive']] },
+                { type: 'row', fields: [
+                    { type: 'text', key: 'card_height', label: 'Card Height', placeholder: 'e.g. 130, 200px, auto' },
+                    { type: 'text', key: 'stack_order', label: 'Stack Order (z-index)', placeholder: 'e.g. 0, 1, -1' },
+                ]},
+                { type: 'text', key: 'offset', label: 'Offset (CSS margin)', placeholder: 'e.g. -50px 0px 0px 0px' },
+                { type: 'switch', key: 'square', label: 'Square (1:1 aspect ratio)' },
+                { type: 'switch', key: 'full_width', label: 'Full Width' },
+            ]},
+            { id: 'theme', title: 'Theme & Filters', fields: [
+                { type: 'select', key: 'theme', label: 'Theme', options: [
+                    ['', 'Auto (follow HA theme)'], ['dark', 'Dark'], ['light', 'Light'], ['night', 'Night'], ['day', 'Day']] },
+                { type: 'select', key: 'filter', label: 'Canvas Filter', options: [
+                    ['', 'None'], ['darken', 'Darken'], ['vivid', 'Vivid'], ['muted', 'Muted'], ['warm', 'Warm']] },
+                { type: 'select', key: 'moon_style', label: 'Moon Style', options: [
+                    ['', 'Default (blue)'], ['blue', 'Blue'], ['yellow', 'Yellow'], ['purple', 'Purple'], ['grey', 'Grey']] },
+                { type: 'switch', key: 'css_mask_vertical', label: 'Vertical Edge Fade (immersive)', invert: true },
+                { type: 'switch', key: 'css_mask_horizontal', label: 'Horizontal Edge Fade (immersive)', invert: true },
+            ]},
+            { id: 'sunmoon', title: 'Sun & Moon', fields: [
+                { type: 'text', key: 'sun_moon_size', label: 'Size (px)', placeholder: 'e.g. 50' },
+                { type: 'row', fields: [
+                    { type: 'text', key: 'sun_moon_x_position', label: 'X Position', placeholder: 'e.g. -65, 100, center' },
+                    { type: 'text', key: 'sun_moon_y_position', label: 'Y Position', placeholder: 'e.g. 55, center' },
+                ]},
+            ]},
+            { id: 'text', title: 'Text & Icons', fields: [
+                { type: 'entity', key: 'top_text_sensor', label: 'Top Text Sensor' },
+                { type: 'entity', key: 'bottom_text_sensor', label: 'Bottom Text Sensor' },
+                { type: 'row', fields: [
+                    { type: 'text', key: 'top_font_size', label: 'Top Font Size', placeholder: 'e.g. 3em, 48px' },
+                    { type: 'text', key: 'bottom_font_size', label: 'Bottom Font Size', placeholder: 'e.g. 16px, 1.2em' },
+                ]},
+                { type: 'text', key: 'bottom_text_icon', label: 'Bottom Text Icon', placeholder: 'e.g. mdi:water-percent, weather' },
+                { type: 'text', key: 'bottom_text_icon_path', label: 'Bottom Text Icon Path', placeholder: 'e.g. /local/weather-icons/' },
+                { type: 'select', key: 'text_background_style', label: 'Text Background Style', options: [
+                    ['', 'Default (frosted)'], ['frosted', 'Frosted'], ['pill', 'Pill'], ['fade', 'Fade']] },
+                { type: 'switch', key: 'top_text_background', label: 'Top Text Background' },
+                { type: 'switch', key: 'bottom_text_background', label: 'Bottom Text Background' },
+                { type: 'switch', key: 'combine_text', label: 'Combine Text', legacyKey: 'combine_texts' },
+                { type: 'switch', key: 'disable_text', label: 'Disable All Text' },
+                { type: 'switch', key: 'disable_bottom_text', label: 'Disable Bottom Text' },
+                { type: 'switch', key: 'disable_bottom_icon', label: 'Disable Bottom Icon' },
+            ]},
+            { id: 'textpos', title: 'Text Position', fields: [
+                { type: 'select', key: 'text_position', label: 'Text Position', options: [
+                    ['', 'Auto'], ['left', 'Left'], ['right', 'Right'], ['center', 'Center'],
+                    ['top-left', 'Top Left'], ['top-right', 'Top Right'], ['top-center', 'Top Center'],
+                    ['bottom-left', 'Bottom Left'], ['bottom-right', 'Bottom Right'], ['bottom-center', 'Bottom Center'],
+                    ['split-top', 'Split Top'], ['split-bottom', 'Split Bottom']] },
+                { type: 'select', key: 'text_alignment', label: 'Text Alignment', options: [
+                    ['', 'Default (spread)'], ['spread', 'Spread'], ['top', 'Top'], ['center', 'Center'], ['bottom', 'Bottom']] },
+                { type: 'switch', key: 'swap_text', label: 'Swap Texts', legacyKey: 'swap_texts' },
+            ]},
+            { id: 'images', title: 'Custom Images', fields: [
+                { type: 'text', key: 'day', label: 'Day Image', placeholder: '/local/house-day.png' },
+                { type: 'text', key: 'night', label: 'Night Image', placeholder: '/local/house-night.png' },
+                { type: 'row', fields: [
+                    { type: 'text', key: 'image_scale', label: 'Image Scale (%)', placeholder: 'e.g. 90' },
+                    { type: 'select', key: 'image_alignment', label: 'Image Alignment', options: [
+                        ['', 'Default (top-right)'], ['center', 'Center'],
+                        ['top-right', 'Top Right'], ['top-left', 'Top Left'], ['top-center', 'Top Center'],
+                        ['bottom', 'Bottom'], ['bottom-center', 'Bottom Center'], ['bottom-left', 'Bottom Left'], ['bottom-right', 'Bottom Right']] },
+                ]},
+                { type: 'entity', key: 'status_entity', label: 'Status Entity' },
+                { type: 'text', key: 'status_image_day', label: 'Status Image (Day)', placeholder: '/local/house-day-door-open.png' },
+                { type: 'text', key: 'status_image_night', label: 'Status Image (Night)', placeholder: '/local/house-night-door-open.png' },
+            ]},
+            { id: 'customcards', title: 'Embedded Cards', fields: [
+                { type: 'select', key: 'custom_cards_position', label: 'Position', options: [
+                    ['', 'Default (bottom)'], ['bottom', 'Bottom'], ['top', 'Top'],
+                    ['top-left', 'Top Left'], ['top-right', 'Top Right'], ['top-center', 'Top Center'],
+                    ['bottom-left', 'Bottom Left'], ['bottom-right', 'Bottom Right'], ['bottom-center', 'Bottom Center']] },
+                { type: 'text', key: 'custom_cards_css_class', label: 'CSS Class', placeholder: 'Custom CSS class name' },
+                { type: 'yaml', key: 'custom_cards', label: 'Custom Cards (YAML list — each entry needs at minimum a "type:" key)' },
+            ]},
+            { id: 'actions', title: 'Actions', fields: [
+                { type: 'yaml', key: 'tap_action', label: 'Tap Action (YAML — e.g. action: more-info)' },
+            ]},
+        ];
+    }
+
+    // ── Main render ──
     _render() {
+        const root = this.shadowRoot;
+        root.innerHTML = '';
+
+        const style = document.createElement('style');
+        style.textContent = `
+            :host { display: block; }
+            .section { border: 1px solid var(--divider-color, #e0e0e0); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
+            .section-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; cursor: pointer;
+                background: var(--secondary-background-color, #f5f5f5); user-select: none; font-weight: 500; font-size: 14px; }
+            .section-header:hover { background: var(--primary-background-color, #eee); }
+            .arrow { transition: transform 0.2s; font-size: 12px; }
+            .arrow.open { transform: rotate(90deg); }
+            .section-content { padding: 12px 14px; display: flex; flex-direction: column; gap: 12px; }
+            .row { display: flex; gap: 12px; align-items: flex-end; }
+            .row > * { flex: 1; min-width: 0; }
+            ha-entity-picker, ha-textfield, ha-select { display: block; width: 100%; }
+            .switch-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; }
+            .switch-row label { font-size: 14px; flex: 1; }
+            ha-switch { flex: none; }
+            .yaml-hint { font-size: 12px; color: var(--secondary-text-color, #888); font-style: italic; padding: 4px 0; }
+            textarea { width: 100%; min-height: 120px; font-family: monospace; font-size: 12px; padding: 8px;
+                border: 1px solid var(--divider-color, #ccc); border-radius: 4px; box-sizing: border-box;
+                background: var(--card-background-color, #fff); color: var(--primary-text-color, #333); resize: vertical; }
+        `;
+        root.appendChild(style);
+
+        const wrapper = document.createElement('div');
+        for (const section of this._getSections()) {
+            wrapper.appendChild(this._buildSection(section));
+        }
+        root.appendChild(wrapper);
+    }
+
+    // ── Section builder ──
+    _buildSection(section) {
+        const open = this._expandedSections.has(section.id);
+        const div = document.createElement('div');
+        div.className = 'section';
+
+        const header = document.createElement('div');
+        header.className = 'section-header';
+        header.innerHTML = `<span>${section.title}</span><span class="arrow ${open ? 'open' : ''}">&#9654;</span>`;
+        header.addEventListener('click', () => this._toggleSection(section.id));
+        div.appendChild(header);
+
+        if (open) {
+            const content = document.createElement('div');
+            content.className = 'section-content';
+            for (const field of section.fields) {
+                this._buildField(content, field);
+            }
+            div.appendChild(content);
+        }
+        return div;
+    }
+
+    // ── Field builder — creates real DOM elements with imperative property setting ──
+    _buildField(container, field) {
         const c = this._config;
 
-        this.shadowRoot.innerHTML = `
-            <style>
-                :host {
-                    display: block;
-                    font-family: var(--paper-font-body1_-_font-family, 'Roboto', sans-serif);
+        switch (field.type) {
+            case 'entity': {
+                const el = document.createElement('ha-entity-picker');
+                el.hass = this._hass;
+                el.value = c[field.key] || '';
+                el.label = field.label;
+                if (field.domains) el.includeDomains = field.domains;
+                el.allowCustomEntity = true;
+                el.addEventListener('value-changed', (ev) => {
+                    this._updateConfig(field.key, ev.detail.value || '');
+                });
+                container.appendChild(el);
+                break;
+            }
+            case 'text': {
+                const el = document.createElement('ha-textfield');
+                el.label = field.label;
+                el.value = String(c[field.key] ?? '');
+                el.placeholder = field.placeholder || '';
+                el.addEventListener('change', (ev) => {
+                    let val = ev.target.value;
+                    if (['card_height', 'stack_order', 'image_scale', 'sun_moon_size'].includes(field.key)) {
+                        if (val !== '' && val !== 'auto' && val !== 'center' && !isNaN(Number(val))) val = Number(val);
+                    }
+                    if (['sun_moon_x_position', 'sun_moon_y_position'].includes(field.key)) {
+                        if (val !== '' && val !== 'center' && !isNaN(Number(val))) val = Number(val);
+                    }
+                    this._updateConfig(field.key, val);
+                });
+                container.appendChild(el);
+                break;
+            }
+            case 'select': {
+                const el = document.createElement('ha-select');
+                el.label = field.label;
+                el.value = String(c[field.key] || '');
+                el.fixedMenuPosition = true;
+                el.naturalMenuWidth = true;
+                for (const [val, lbl] of field.options) {
+                    const item = document.createElement('ha-list-item');
+                    item.value = val;
+                    item.textContent = lbl;
+                    el.appendChild(item);
                 }
-                .editor-section {
-                    border: 1px solid var(--divider-color, #e0e0e0);
-                    border-radius: 8px;
-                    margin-bottom: 8px;
-                    overflow: hidden;
+                el.addEventListener('selected', (ev) => {
+                    this._updateConfig(field.key, ev.target.value || '');
+                });
+                el.addEventListener('closed', (ev) => ev.stopPropagation());
+                container.appendChild(el);
+                break;
+            }
+            case 'switch': {
+                const row = document.createElement('div');
+                row.className = 'switch-row';
+                const label = document.createElement('label');
+                label.textContent = field.label;
+                const sw = document.createElement('ha-switch');
+                // invert: default is true (e.g. css_mask_*), checked = config !== false
+                if (field.invert) {
+                    sw.checked = c[field.key] !== false;
+                } else {
+                    const val = field.legacyKey ? (c[field.key] ?? c[field.legacyKey]) : c[field.key];
+                    sw.checked = val === true;
                 }
-                .section-header {
-                    display: flex;
-                    align-items: center;
-                    justify-content: space-between;
-                    padding: 10px 14px;
-                    cursor: pointer;
-                    background: var(--secondary-background-color, #f5f5f5);
-                    user-select: none;
-                    font-weight: 500;
-                    font-size: 14px;
+                sw.addEventListener('change', (ev) => {
+                    const checked = ev.target.checked;
+                    if (field.invert && checked) {
+                        delete this._config[field.key];
+                    } else {
+                        this._config[field.key] = checked;
+                    }
+                    this._fireChanged();
+                });
+                row.appendChild(label);
+                row.appendChild(sw);
+                container.appendChild(row);
+                break;
+            }
+            case 'yaml': {
+                const hint = document.createElement('div');
+                hint.className = 'yaml-hint';
+                hint.textContent = field.label;
+                container.appendChild(hint);
+                const ta = document.createElement('textarea');
+                ta.value = c[field.key] ? this._toYaml(c[field.key]) : '';
+                ta.addEventListener('change', () => {
+                    const parsed = this._parseYaml(ta.value);
+                    if (parsed === undefined) {
+                        delete this._config[field.key];
+                    } else {
+                        this._config[field.key] = (field.key === 'custom_cards' && !Array.isArray(parsed)) ? [parsed] : parsed;
+                    }
+                    this._fireChanged();
+                });
+                container.appendChild(ta);
+                break;
+            }
+            case 'row': {
+                const row = document.createElement('div');
+                row.className = 'row';
+                for (const sub of field.fields) {
+                    const wrap = document.createElement('div');
+                    this._buildField(wrap, sub);
+                    row.appendChild(wrap);
                 }
-                .section-header:hover {
-                    background: var(--primary-background-color, #eee);
-                }
-                .section-header .arrow {
-                    transition: transform 0.2s;
-                    font-size: 12px;
-                }
-                .section-header .arrow.open {
-                    transform: rotate(90deg);
-                }
-                .section-content {
-                    padding: 12px 14px;
-                    display: flex;
-                    flex-direction: column;
-                    gap: 12px;
-                }
-                .row {
-                    display: flex;
-                    gap: 12px;
-                    align-items: flex-end;
-                }
-                .row > * {
-                    flex: 1;
-                    min-width: 0;
-                }
-                ha-entity-picker {
-                    display: block;
-                    width: 100%;
-                }
-                ha-textfield {
-                    display: block;
-                    width: 100%;
-                }
-                ha-select {
-                    display: block;
-                    width: 100%;
-                }
-                .switch-row {
-                    display: flex;
-                    align-items: center;
-                    justify-content: space-between;
-                    padding: 4px 0;
-                }
-                .switch-row label {
-                    font-size: 14px;
-                    flex: 1;
-                }
-                ha-switch {
-                    flex: none;
-                }
-                .yaml-hint {
-                    font-size: 12px;
-                    color: var(--secondary-text-color, #888);
-                    font-style: italic;
-                    padding: 4px 0;
-                }
-                textarea {
-                    width: 100%;
-                    min-height: 120px;
-                    font-family: monospace;
-                    font-size: 12px;
-                    padding: 8px;
-                    border: 1px solid var(--divider-color, #ccc);
-                    border-radius: 4px;
-                    background: var(--card-background-color, #fff);
-                    color: var(--primary-text-color, #333);
-                    resize: vertical;
-                    box-sizing: border-box;
-                }
-            </style>
-            <div class="editor">
-                ${this._renderSection('entities', 'Entities', this._renderEntities(c))}
-                ${this._renderSection('layout', 'Card Style & Layout', this._renderLayout(c))}
-                ${this._renderSection('theme', 'Theme & Filters', this._renderTheme(c))}
-                ${this._renderSection('sunmoon', 'Sun & Moon', this._renderSunMoon(c))}
-                ${this._renderSection('text', 'Text & Icons', this._renderText(c))}
-                ${this._renderSection('textpos', 'Text Position', this._renderTextPosition(c))}
-                ${this._renderSection('images', 'Custom Images', this._renderImages(c))}
-                ${this._renderSection('customcards', 'Embedded Cards', this._renderCustomCards(c))}
-                ${this._renderSection('actions', 'Actions', this._renderActions(c))}
-            </div>
-        `;
-
-        this._bindEvents();
+                container.appendChild(row);
+                break;
+            }
+        }
     }
 
-    _renderSection(id, title, content) {
-        const open = this._expandedSections.has(id);
-        return `
-            <div class="editor-section">
-                <div class="section-header" data-section="${id}">
-                    <span>${title}</span>
-                    <span class="arrow ${open ? 'open' : ''}">&#9654;</span>
-                </div>
-                ${open ? `<div class="section-content">${content}</div>` : ''}
-            </div>
-        `;
-    }
-
-    // === ENTITY FIELDS ===
-    _renderEntities(c) {
-        return `
-            <ha-entity-picker
-                data-key="weather_entity"
-                .hass=${null}
-                .value="${c.weather_entity || ''}"
-                .label=${"Weather Entity (required)"}
-                .includeDomains=${JSON.stringify(["weather"])}
-                allow-custom-entity
-            ></ha-entity-picker>
-            <ha-entity-picker
-                data-key="sun_entity"
-                .hass=${null}
-                .value="${c.sun_entity || ''}"
-                .label=${"Sun Entity (required)"}
-                .includeDomains=${JSON.stringify(["sun"])}
-                allow-custom-entity
-            ></ha-entity-picker>
-            <ha-entity-picker
-                data-key="moon_phase_entity"
-                .hass=${null}
-                .value="${c.moon_phase_entity || ''}"
-                .label=${"Moon Phase Entity"}
-                .includeDomains=${JSON.stringify(["sensor"])}
-                allow-custom-entity
-            ></ha-entity-picker>
-            <ha-entity-picker
-                data-key="theme_entity"
-                .hass=${null}
-                .value="${c.theme_entity || ''}"
-                .label=${"Theme Entity"}
-                allow-custom-entity
-            ></ha-entity-picker>
-        `;
-    }
-
-    // === LAYOUT ===
-    _renderLayout(c) {
-        return `
-            ${this._select('card_style', 'Card Style', c.card_style || '', [
-                { value: '', label: 'Default (immersive)' },
-                { value: 'standalone', label: 'Standalone' },
-                { value: 'immersive', label: 'Immersive' },
-            ])}
-            <div class="row">
-                ${this._textfield('card_height', 'Card Height', c.card_height ?? '', 'e.g. 130, 200px, auto')}
-                ${this._textfield('stack_order', 'Stack Order (z-index)', c.stack_order ?? '', 'e.g. 0, 1, -1')}
-            </div>
-            ${this._textfield('offset', 'Offset (CSS margin)', c.offset || '', 'e.g. -50px 0px 0px 0px')}
-            ${this._switch('square', 'Square (1:1 aspect ratio)', c.square === true)}
-            ${this._switch('full_width', 'Full Width', c.full_width === true)}
-        `;
-    }
-
-    // === THEME & FILTERS ===
-    _renderTheme(c) {
-        return `
-            ${this._select('theme', 'Theme', c.theme || '', [
-                { value: '', label: 'Auto (follow HA theme)' },
-                { value: 'dark', label: 'Dark' },
-                { value: 'light', label: 'Light' },
-                { value: 'night', label: 'Night' },
-                { value: 'day', label: 'Day' },
-            ])}
-            ${this._select('filter', 'Canvas Filter', c.filter || '', [
-                { value: '', label: 'None' },
-                { value: 'darken', label: 'Darken' },
-                { value: 'vivid', label: 'Vivid' },
-                { value: 'muted', label: 'Muted' },
-                { value: 'warm', label: 'Warm' },
-            ])}
-            ${this._select('moon_style', 'Moon Style', c.moon_style || '', [
-                { value: '', label: 'Default (blue)' },
-                { value: 'blue', label: 'Blue' },
-                { value: 'yellow', label: 'Yellow' },
-                { value: 'purple', label: 'Purple' },
-                { value: 'grey', label: 'Grey' },
-            ])}
-            ${this._switch('css_mask_vertical', 'Vertical Edge Fade (immersive)', c.css_mask_vertical !== false)}
-            ${this._switch('css_mask_horizontal', 'Horizontal Edge Fade (immersive)', c.css_mask_horizontal !== false)}
-        `;
-    }
-
-    // === SUN & MOON ===
-    _renderSunMoon(c) {
-        return `
-            ${this._textfield('sun_moon_size', 'Size (px)', c.sun_moon_size ?? '', 'e.g. 50')}
-            <div class="row">
-                ${this._textfield('sun_moon_x_position', 'X Position', c.sun_moon_x_position ?? '', 'e.g. -65, 100, center')}
-                ${this._textfield('sun_moon_y_position', 'Y Position', c.sun_moon_y_position ?? '', 'e.g. 55, center')}
-            </div>
-        `;
-    }
-
-    // === TEXT ===
-    _renderText(c) {
-        return `
-            <ha-entity-picker
-                data-key="top_text_sensor"
-                .hass=${null}
-                .value="${c.top_text_sensor || ''}"
-                .label=${"Top Text Sensor"}
-                allow-custom-entity
-            ></ha-entity-picker>
-            <ha-entity-picker
-                data-key="bottom_text_sensor"
-                .hass=${null}
-                .value="${c.bottom_text_sensor || ''}"
-                .label=${"Bottom Text Sensor"}
-                allow-custom-entity
-            ></ha-entity-picker>
-            <div class="row">
-                ${this._textfield('top_font_size', 'Top Font Size', c.top_font_size || '', 'e.g. 3em, 48px')}
-                ${this._textfield('bottom_font_size', 'Bottom Font Size', c.bottom_font_size || '', 'e.g. 16px, 1.2em')}
-            </div>
-            ${this._textfield('bottom_text_icon', 'Bottom Text Icon', c.bottom_text_icon || '', 'e.g. mdi:water-percent, weather')}
-            ${this._textfield('bottom_text_icon_path', 'Bottom Text Icon Path', c.bottom_text_icon_path || '', 'e.g. /local/weather-icons/')}
-            ${this._select('text_background_style', 'Text Background Style', c.text_background_style || '', [
-                { value: '', label: 'Default (frosted)' },
-                { value: 'frosted', label: 'Frosted' },
-                { value: 'pill', label: 'Pill' },
-                { value: 'fade', label: 'Fade' },
-            ])}
-            ${this._switch('top_text_background', 'Top Text Background', c.top_text_background === true)}
-            ${this._switch('bottom_text_background', 'Bottom Text Background', c.bottom_text_background === true)}
-            ${this._switch('combine_text', 'Combine Text', (c.combine_text ?? c.combine_texts) === true)}
-            ${this._switch('disable_text', 'Disable All Text', c.disable_text === true)}
-            ${this._switch('disable_bottom_text', 'Disable Bottom Text', c.disable_bottom_text === true)}
-            ${this._switch('disable_bottom_icon', 'Disable Bottom Icon', c.disable_bottom_icon === true)}
-        `;
-    }
-
-    // === TEXT POSITION ===
-    _renderTextPosition(c) {
-        return `
-            ${this._select('text_position', 'Text Position', c.text_position || '', [
-                { value: '', label: 'Auto' },
-                { value: 'left', label: 'Left' },
-                { value: 'right', label: 'Right' },
-                { value: 'center', label: 'Center' },
-                { value: 'top-left', label: 'Top Left' },
-                { value: 'top-right', label: 'Top Right' },
-                { value: 'top-center', label: 'Top Center' },
-                { value: 'bottom-left', label: 'Bottom Left' },
-                { value: 'bottom-right', label: 'Bottom Right' },
-                { value: 'bottom-center', label: 'Bottom Center' },
-                { value: 'split-top', label: 'Split Top' },
-                { value: 'split-bottom', label: 'Split Bottom' },
-            ])}
-            ${this._select('text_alignment', 'Text Alignment', c.text_alignment || '', [
-                { value: '', label: 'Default (spread)' },
-                { value: 'spread', label: 'Spread' },
-                { value: 'top', label: 'Top' },
-                { value: 'center', label: 'Center' },
-                { value: 'bottom', label: 'Bottom' },
-            ])}
-            ${this._switch('swap_text', 'Swap Texts', (c.swap_text ?? c.swap_texts) === true)}
-        `;
-    }
-
-    // === IMAGES ===
-    _renderImages(c) {
-        return `
-            ${this._textfield('day', 'Day Image', c.day || '', '/local/house-day.png')}
-            ${this._textfield('night', 'Night Image', c.night || '', '/local/house-night.png')}
-            <div class="row">
-                ${this._textfield('image_scale', 'Image Scale (%)', c.image_scale ?? '', 'e.g. 90')}
-                ${this._select('image_alignment', 'Image Alignment', c.image_alignment || '', [
-                    { value: '', label: 'Default (top-right)' },
-                    { value: 'center', label: 'Center' },
-                    { value: 'top-right', label: 'Top Right' },
-                    { value: 'top-left', label: 'Top Left' },
-                    { value: 'top-center', label: 'Top Center' },
-                    { value: 'bottom', label: 'Bottom' },
-                    { value: 'bottom-center', label: 'Bottom Center' },
-                    { value: 'bottom-left', label: 'Bottom Left' },
-                    { value: 'bottom-right', label: 'Bottom Right' },
-                ])}
-            </div>
-            <ha-entity-picker
-                data-key="status_entity"
-                .hass=${null}
-                .value="${c.status_entity || ''}"
-                .label=${"Status Entity"}
-                allow-custom-entity
-            ></ha-entity-picker>
-            ${this._textfield('status_image_day', 'Status Image (Day)', c.status_image_day || '', '/local/house-day-door-open.png')}
-            ${this._textfield('status_image_night', 'Status Image (Night)', c.status_image_night || '', '/local/house-night-door-open.png')}
-        `;
-    }
-
-    // === CUSTOM CARDS ===
-    _renderCustomCards(c) {
-        const yaml = c.custom_cards ? this._toYaml(c.custom_cards) : '';
-        return `
-            ${this._select('custom_cards_position', 'Position', c.custom_cards_position || '', [
-                { value: '', label: 'Default (bottom)' },
-                { value: 'bottom', label: 'Bottom' },
-                { value: 'top', label: 'Top' },
-                { value: 'top-left', label: 'Top Left' },
-                { value: 'top-right', label: 'Top Right' },
-                { value: 'top-center', label: 'Top Center' },
-                { value: 'bottom-left', label: 'Bottom Left' },
-                { value: 'bottom-right', label: 'Bottom Right' },
-                { value: 'bottom-center', label: 'Bottom Center' },
-            ])}
-            ${this._textfield('custom_cards_css_class', 'CSS Class', c.custom_cards_css_class || '', 'Custom CSS class name')}
-            <div class="yaml-hint">Custom Cards (YAML list). Each entry needs at minimum a "type:" key.</div>
-            <textarea data-key="custom_cards_yaml" .value="${this._escapeHtml(yaml)}">${this._escapeHtml(yaml)}</textarea>
-        `;
-    }
-
-    // === ACTIONS ===
-    _renderActions(c) {
-        const yaml = c.tap_action ? this._toYaml(c.tap_action) : '';
-        return `
-            <div class="yaml-hint">Tap Action (YAML). Example: action: more-info</div>
-            <textarea data-key="tap_action_yaml" .value="${this._escapeHtml(yaml)}">${this._escapeHtml(yaml)}</textarea>
-        `;
-    }
-
-    // === HELPERS ===
-    _textfield(key, label, value, placeholder) {
-        return `<ha-textfield
-            data-key="${key}"
-            .label="${label}"
-            .value="${this._escapeHtml(String(value))}"
-            .placeholder="${placeholder || ''}"
-            .configValue="${key}"
-        ></ha-textfield>`;
-    }
-
-    _select(key, label, value, options) {
-        const items = options.map(o =>
-            `<ha-list-item value="${o.value}" ${o.value === value ? 'selected' : ''}>${o.label}</ha-list-item>`
-        ).join('');
-        return `<ha-select
-            data-key="${key}"
-            .label="${label}"
-            .value="${value}"
-            .configValue="${key}"
-            fixedMenuPosition
-            naturalMenuWidth
-        >${items}</ha-select>`;
-    }
-
-    _switch(key, label, checked) {
-        return `<div class="switch-row">
-            <label>${label}</label>
-            <ha-switch data-key="${key}" ${checked ? 'checked' : ''}></ha-switch>
-        </div>`;
-    }
-
-    _escapeHtml(str) {
-        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    }
-
-    // Simple YAML serializer (flat objects and simple arrays of objects)
+    // ── YAML helpers ──
     _toYaml(obj, indent = 0) {
         const pad = '  '.repeat(indent);
         if (Array.isArray(obj)) {
             return obj.map(item => {
                 if (typeof item === 'object' && item !== null) {
                     const entries = Object.entries(item);
-                    if (entries.length === 0) return `${pad}-`;
-                    return entries.map(([ k, v ], i) => {
-                        const prefix = i === 0 ? `${pad}- ` : `${pad}  `;
-                        if (typeof v === 'object' && v !== null) {
-                            return `${prefix}${k}:\n${this._toYaml(v, indent + 2)}`;
-                        }
-                        return `${prefix}${k}: ${v}`;
+                    if (!entries.length) return `${pad}-`;
+                    return entries.map(([k, v], i) => {
+                        const pre = i === 0 ? `${pad}- ` : `${pad}  `;
+                        return typeof v === 'object' && v !== null
+                            ? `${pre}${k}:\n${this._toYaml(v, indent + 2)}`
+                            : `${pre}${k}: ${v}`;
                     }).join('\n');
                 }
                 return `${pad}- ${item}`;
             }).join('\n');
         }
         if (typeof obj === 'object' && obj !== null) {
-            return Object.entries(obj).map(([k, v]) => {
-                if (typeof v === 'object' && v !== null) {
-                    return `${pad}${k}:\n${this._toYaml(v, indent + 1)}`;
-                }
-                return `${pad}${k}: ${v}`;
-            }).join('\n');
+            return Object.entries(obj).map(([k, v]) =>
+                typeof v === 'object' && v !== null
+                    ? `${pad}${k}:\n${this._toYaml(v, indent + 1)}`
+                    : `${pad}${k}: ${v}`
+            ).join('\n');
         }
         return `${pad}${obj}`;
     }
 
-    // Simple YAML parser (handles flat key-value and arrays of objects)
     _parseYaml(text) {
         if (!text || !text.trim()) return undefined;
-        try {
-            // Use js-yaml if available (HA ships it), otherwise basic parse
-            if (window.jsyaml) return window.jsyaml.load(text);
-        } catch (_) { /* fall through */ }
-        // Basic parser fallback
+        try { if (window.jsyaml) return window.jsyaml.load(text); } catch (_) {}
         return this._basicYamlParse(text);
     }
 
@@ -1139,34 +1010,32 @@ class AtmosphericWeatherCardEditor extends HTMLElement {
             const items = [];
             let current = null;
             for (const line of lines) {
-                const trimmed = line.trimStart();
-                if (!trimmed || trimmed.startsWith('#')) continue;
-                if (trimmed.startsWith('- ')) {
+                const t = line.trimStart();
+                if (!t || t.startsWith('#')) continue;
+                if (t.startsWith('- ')) {
                     if (current !== null) items.push(current);
-                    const rest = trimmed.slice(2).trim();
+                    const rest = t.slice(2).trim();
                     if (rest.includes(':')) {
                         current = {};
                         const [k, ...v] = rest.split(':');
-                        const val = v.join(':').trim();
-                        current[k.trim()] = this._yamlVal(val);
+                        current[k.trim()] = this._yamlVal(v.join(':').trim());
                     } else {
                         current = this._yamlVal(rest);
                     }
-                } else if (current && typeof current === 'object' && trimmed.includes(':')) {
-                    const [k, ...v] = trimmed.split(':');
+                } else if (current && typeof current === 'object' && t.includes(':')) {
+                    const [k, ...v] = t.split(':');
                     current[k.trim()] = this._yamlVal(v.join(':').trim());
                 }
             }
             if (current !== null) items.push(current);
             return items;
         }
-        // Object
         const result = {};
         for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || trimmed.startsWith('#')) continue;
-            if (trimmed.includes(':')) {
-                const [k, ...v] = trimmed.split(':');
+            const t = line.trim();
+            if (!t || t.startsWith('#')) continue;
+            if (t.includes(':')) {
+                const [k, ...v] = t.split(':');
                 result[k.trim()] = this._yamlVal(v.join(':').trim());
             }
         }
@@ -1178,99 +1047,9 @@ class AtmosphericWeatherCardEditor extends HTMLElement {
         if (str === 'false') return false;
         if (str === 'null' || str === '') return str === '' ? '' : null;
         if (!isNaN(Number(str)) && str !== '') return Number(str);
-        // Strip quotes
-        if ((str.startsWith("'") && str.endsWith("'")) || (str.startsWith('"') && str.endsWith('"'))) {
+        if ((str.startsWith("'") && str.endsWith("'")) || (str.startsWith('"') && str.endsWith('"')))
             return str.slice(1, -1);
-        }
         return str;
-    }
-
-    _bindEvents() {
-        const root = this.shadowRoot;
-
-        // Section toggles
-        root.querySelectorAll('.section-header').forEach(el => {
-            el.addEventListener('click', () => this._toggleSection(el.dataset.section));
-        });
-
-        // Entity pickers
-        root.querySelectorAll('ha-entity-picker').forEach(el => {
-            if (this._hass) el.hass = this._hass;
-            const key = el.dataset.key;
-            el.addEventListener('value-changed', (ev) => {
-                this._updateConfig(key, ev.detail.value || '');
-            });
-        });
-
-        // Text fields
-        root.querySelectorAll('ha-textfield').forEach(el => {
-            const key = el.dataset.key;
-            el.addEventListener('change', (ev) => {
-                let val = ev.target.value;
-                // Auto-convert to number where appropriate
-                if (['card_height', 'stack_order', 'image_scale', 'sun_moon_size'].includes(key)) {
-                    if (val !== '' && val !== 'auto' && val !== 'center' && !isNaN(Number(val))) {
-                        val = Number(val);
-                    }
-                }
-                if (['sun_moon_x_position', 'sun_moon_y_position'].includes(key)) {
-                    if (val !== '' && val !== 'center' && !isNaN(Number(val))) {
-                        val = Number(val);
-                    }
-                }
-                this._updateConfig(key, val);
-            });
-        });
-
-        // Selects
-        root.querySelectorAll('ha-select').forEach(el => {
-            const key = el.dataset.key;
-            el.addEventListener('selected', (ev) => {
-                this._updateConfig(key, ev.target.value || '');
-            });
-            el.addEventListener('closed', (ev) => {
-                ev.stopPropagation();
-            });
-        });
-
-        // Switches
-        root.querySelectorAll('ha-switch').forEach(el => {
-            const key = el.dataset.key;
-            el.addEventListener('change', (ev) => {
-                const checked = ev.target.checked;
-                // For css_mask_* the default is true, so we store false explicitly
-                if ((key === 'css_mask_vertical' || key === 'css_mask_horizontal') && checked) {
-                    delete this._config[key];
-                } else {
-                    this._config[key] = checked;
-                }
-                this._fireChanged();
-            });
-        });
-
-        // YAML textareas
-        root.querySelectorAll('textarea').forEach(el => {
-            const key = el.dataset.key;
-            el.addEventListener('change', () => {
-                const text = el.value;
-                if (key === 'custom_cards_yaml') {
-                    const parsed = this._parseYaml(text);
-                    if (parsed === undefined) {
-                        delete this._config.custom_cards;
-                    } else {
-                        this._config.custom_cards = Array.isArray(parsed) ? parsed : [parsed];
-                    }
-                } else if (key === 'tap_action_yaml') {
-                    const parsed = this._parseYaml(text);
-                    if (parsed === undefined) {
-                        delete this._config.tap_action;
-                    } else {
-                        this._config.tap_action = parsed;
-                    }
-                }
-                this._fireChanged();
-            });
-        });
     }
 }
 
